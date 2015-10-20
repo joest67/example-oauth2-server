@@ -22,6 +22,7 @@ oauth = OAuth2Provider(app)
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(40), unique=True)
+    phone = db.Column(db.Integer, unique=True)
 
 
 class Client(db.Model):
@@ -127,14 +128,19 @@ def current_user():
 def home():
     if request.method == 'POST':
         username = request.form.get('username')
+        phone = request.form.get('phone')
         user = User.query.filter_by(username=username).first()
         if not user:
-            user = User(username=username)
+            user = User(
+                username=username,
+                phone=phone,
+            )
             db.session.add(user)
             db.session.commit()
         session['id'] = user.id
         return redirect('/')
     user = current_user()
+    print session.get('phone'), session.get('id')
     return render_template('home.html', user=user)
 
 
@@ -147,11 +153,8 @@ def client():
         client_id=gen_salt(40),
         client_secret=gen_salt(50),
         _redirect_uris=' '.join([
-            'http://localhost:8000/authorized',
-            'http://127.0.0.1:8000/authorized',
-            'http://127.0.1:8000/authorized',
-            'http://127.1:8000/authorized',
-            ]),
+            'http://opensite.joest.dev/api/authorized',
+        ]),
         _default_scopes='email',
         user_id=user.id,
     )
@@ -228,7 +231,19 @@ def save_token(token, request, *args, **kwargs):
 @app.route('/oauth/token', methods=['GET', 'POST'])
 @oauth.token_handler
 def access_token():
-    return None
+    print request.form
+    client_id = request.form.get('client_id')
+    import uuid
+    token = str(uuid.uuid4())
+    client = Client.query.filter_by(client_id=client_id).first()
+    user = User.query.get(client.user_id)
+    print client, user
+    return {
+        'phone': user.phone,
+        'user_id': user.id,
+        'device_id': token,
+        'auth_token': token,
+    }
 
 
 @app.route('/oauth/authorize', methods=['GET', 'POST'])
@@ -257,4 +272,4 @@ def me():
 
 if __name__ == '__main__':
     db.create_all()
-    app.run()
+    app.run(host='0.0.0.0')
